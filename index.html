@@ -81,6 +81,7 @@ const errors = {
 };
 
 function historyText(data) {
+  if (data.priceSource === 'page') return 'قیمت از صفحهٔ محصول خوانده شد. برای ثبت سابقه، شناسهٔ تنوع لازم است.';
   if (!data.price || !data.variant) return 'برای این پیشنهاد امکان ثبت سابقه وجود ندارد.';
   const key = 'price-history:' + data.id + ':' + data.variant;
   const time = Date.parse(data.checkedAt);
@@ -152,6 +153,7 @@ form.addEventListener('submit', async event => {
     if (data.error) {
       el('status').textContent = errors[data.error] || errors.source;
       if (data.id) addLink('صفحهٔ محصول', 'https://www.digikala.com/product/dkp-' + data.id + '/', el('status').appendChild(document.createElement('div')));
+      if (data.searchTitle) addLink('جست‌وجوی نام محصول در ترب', 'https://torob.com/search/?query=' + encodeURIComponent(data.searchTitle), el('status').appendChild(document.createElement('div')));
       return;
     }
     show(data);
