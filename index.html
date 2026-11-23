@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="بررسی قیمت دیجی‌کالا و مقایسه با پیشنهادهای ترب">
+<title>قیمت‌سنج</title>
+<style>
+*{box-sizing:border-box}
+:root{color-scheme:light;--ink:#122c25;--muted:#4c6259;--green:#07674f;--border:#d5e4dc;--paper:#f3f8f4}
+body{margin:0;background:radial-gradient(ellipse at 50% 5%,#e3f3e9 0%,#f5f9f6 62%);color:var(--ink);font:16px/1.8 Tahoma,Arial,sans-serif;min-height:100vh}
+header,main,footer{width:min(920px,calc(100% - 40px));margin:auto}
+header{padding:25px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-size:18px;font-weight:bold}
+.mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--green);color:white}
+main{padding:clamp(38px,8vw,96px) 0 34px;max-width:750px}
+.hero{text-align:center;margin-bottom:30px}
+h1{font-size:clamp(31px,6vw,57px);letter-spacing:-.045em;margin:0 0 8px;line-height:1.4}
+h2{font-size:20px;margin:0 0 6px}
+p{margin:0 0 12px}
+.hero p,.muted,footer{color:var(--muted)}
+.card{border:1px solid var(--border);border-radius:22px;padding:clamp(16px,4vw,30px);background:#fff;box-shadow:0 16px 38px #122c250a}
+label{display:block;font-weight:bold;margin-bottom:8px}
+.controls{display:flex;gap:10px}
+input,button{font:inherit;border-radius:11px}
+input{width:100%;min-width:0;border:1px solid #b7ccc1;background:#f9fcfa;padding:12px 14px;color:var(--ink)}
+button{background:var(--green);border:0;color:#fff;padding:12px 21px;cursor:pointer;white-space:nowrap;font-weight:bold}
+button:disabled{opacity:.65;cursor:wait}
+:focus-visible{outline:3px solid #418974;outline-offset:3px}
+.help{font-size:14px;margin:10px 0 0;color:var(--muted)}
+#status:not(:empty){margin:16px 0 0;color:#7d340c}
+#result:not([hidden]){margin-top:18px}
+#result p{overflow-wrap:anywhere}
+.price{font-weight:bold;color:var(--green);font-size:25px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:17px 0}
+.panel{border-radius:14px;background:var(--paper);padding:15px}
+.panel p:last-child{margin:0}
+a{color:var(--green);text-underline-offset:4px}
+.links{display:flex;flex-wrap:wrap;gap:8px 22px}
+footer{padding:18px 0;border-top:1px solid var(--border);font-size:14px}
+@media(max-width:550px){.controls{flex-direction:column}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><span class="mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h8l9 9-7 7-10-10z"/><circle cx="7.5" cy="8.5" r="1"/></svg></span>قیمت‌سنج</header>
+<main>
+<section class="hero">
+<h1>این تخفیف واقعیه؟</h1>
+<p>قیمت امروز را با سابقهٔ قیمت و پیشنهادهای ترب مقایسه کن.</p>
+</section>
+<form class="card" id="check">
+<label for="url">لینک محصول</label>
+<div class="controls">
+<input type="url" id="url" dir="ltr" placeholder="https://www.digikala.com/product/dkp-…" required maxlength="2048" aria-describedby="help">
+<button>بررسی قیمت</button>
+</div>
+<p class="help" id="help">بررسی خودکار برای لینک محصول دیجی‌کالا فعال است.</p>
+<p id="status" role="status"></p>
+</form>
+<section id="result" class="card" tabindex="-1" hidden>
+<h2 id="title"></h2>
+<div id="price" class="price"></div>
+<p id="detail" class="help"></p>
+<div class="grid">
+<div class="panel"><h2>سابقهٔ قیمت</h2><p id="history"></p><p id="listed" class="help"></p></div>
+<div class="panel"><h2>مقایسه با بازار</h2><p id="market"></p></div>
+</div>
+<div class="links"></div>
+</section>
+</main>
+<footer>سابقه از زمان اولین بررسی، در همین مرورگر ثبت می‌شود. قیمت‌ها به تومان و بدون هزینهٔ ارسال‌اند.</footer>
+<script>
+const el = id => document.getElementById(id);
+const form = el('check');
+const button = form.querySelector('button');
+const links = document.querySelector('.links');
+const money = value => value.toLocaleString('fa-IR') + ' تومان';
+const errors = {
+  invalid: 'یک لینک معتبر وارد کن.',
+  unsupported: 'فعلاً بررسی خودکار فقط برای لینک مستقیم محصول دیجی‌کالا فعال است.',
+  source: 'دریافت قیمت از دیجی‌کالا ممکن نشد. می‌توانی صفحهٔ محصول را مستقیم باز کنی.'
+};
+
+function historyText(data) {
+  if (!data.price || !data.variant) return 'برای این پیشنهاد امکان ثبت سابقه وجود ندارد.';
+  const key = 'price-history:' + data.id + ':' + data.variant;
+  const time = Date.parse(data.checkedAt);
+  let points = [];
+  try {
+    points = JSON.parse(localStorage.getItem(key) || '[]')
+      .filter(point => point.price > 0 && point.time > time - 30 * 86400000 && point.time <= time);
+    const day = new Date(time).toLocaleDateString('en-CA', { timeZone: 'Asia/Tehran' });
+    const prior = points.filter(point => point.day !== day);
+    const today = points.find(point => point.day === day);
+    localStorage.setItem(key, JSON.stringify([...prior, {
+      day, time, price: Math.min(data.price, today?.price ?? data.price)
+    }]));
+    if (!prior.length) return 'برای تأیید تخفیف هنوز سابقهٔ کافی نیست. قیمت امروز ثبت شد.';
+    const lowest = Math.min(...prior.map(point => point.price));
+    if (data.price < lowest) return money(lowest - data.price) + ' ارزان‌تر از کمترین قیمت ثبت‌شده در روزهای قبل.';
+    return 'کمترین قیمت ثبت‌شده در روزهای قبل ' + money(lowest) + ' بوده است.';
+  } catch {
+    return 'ذخیرهٔ سابقه در این مرورگر در دسترس نیست.';
+  }
+}
+
+function addLink(label, href, parent = links) {
+  const link = document.createElement('a');
+  link.textContent = label;
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  parent.append(link);
+}
+
+function show(data) {
+  el('title').textContent = data.title;
+  el('price').textContent = data.price ? money(data.price) : 'قیمت قابل خرید در دسترس نیست';
+  el('detail').textContent = [data.variantLabel, new Date(data.checkedAt).toLocaleString('fa-IR', { timeZone: 'Asia/Tehran' })].filter(Boolean).join(' · ');
+  el('history').textContent = historyText(data);
+  el('listed').textContent = data.list && data.price
+    ? 'قیمت قبل از تخفیف اعلام‌شدهٔ فروشگاه ' + money(data.list) : '';
+  const offer = data.market.offer;
+  el('market').textContent = offer
+    ? 'قیمت درج‌شده در ترب ' + money(offer.price) + '. ' + (
+      data.price && offer.price < data.price
+        ? money(data.price - offer.price) + ' کمتر از دیجی‌کالا. رنگ، گارانتی و موجودی را در صفحهٔ فروشنده بررسی کن.'
+        : 'رنگ، گارانتی و موجودی را در صفحهٔ فروشنده بررسی کن.'
+    )
+    : data.market.state === 'no_match'
+      ? 'در نتایج ترب موردی با نام یکسان پیدا نشد.'
+      : 'دریافت خودکار قیمت از ترب ممکن نشد.';
+  links.replaceChildren();
+  addLink('صفحهٔ دیجی‌کالا', data.url);
+  addLink(offer ? 'مشاهدهٔ فروشنده‌ها در ترب' : 'جست‌وجو در ترب',
+    offer?.url || 'https://torob.com/search/?query=' + encodeURIComponent(data.title));
+  el('result').hidden = false;
+  el('result').focus();
+}
+
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  button.disabled = true;
+  el('result').hidden = true;
+  el('status').textContent = 'در حال بررسی قیمت…';
+  try {
+    const response = await fetch('/api/check?url=' + encodeURIComponent(el('url').value.trim()), {
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!response.ok) throw new Error('request');
+    const data = await response.json();
+    el('status').textContent = '';
+    if (data.error) {
+      el('status').textContent = errors[data.error] || errors.source;
+      if (data.id) addLink('صفحهٔ محصول', 'https://www.digikala.com/product/dkp-' + data.id + '/', el('status').appendChild(document.createElement('div')));
+      return;
+    }
+    show(data);
+  } catch {
+    el('status').textContent = 'ارتباط برقرار نشد. دوباره امتحان کن.';
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
