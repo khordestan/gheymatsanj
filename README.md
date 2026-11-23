@@ -9,11 +9,14 @@
 به Node.js نسخهٔ ۲۲ یا جدیدتر و برای اجرای محلی به Wrangler نیاز دارید.
 
 ```sh
-node build.mjs
-npx wrangler dev dist/server/index.js --compatibility-date 2026-01-01
+npx wrangler dev
 ```
 
 نشانی محلی چاپ‌شده در ترمینال را باز کنید. اجرای بررسی قیمت به دسترسی شبکه به دیجی‌کالا و ترب و در دسترس بودن پاسخ‌های آن‌ها وابسته است. خروجی ساخت یک ماژول Cloudflare Worker در `dist/server/index.js` است.
+
+## انتشار روی Cloudflare Workers
+
+برای انتشار دستی از ریشهٔ مخزن، دستور `npx wrangler deploy` را اجرا کنید. برای انتشار خودکار، در بخش Workers & Pages مخزن گیت‌هاب را وصل کنید، شاخهٔ تولید را روی `main` بگذارید و دستور انتشار را `npx wrangler deploy` وارد کنید. Wrangler مرحلهٔ ساخت را از تنظیمات پروژه اجرا می‌کند.
 
 ## مجوز
 
