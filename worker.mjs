@@ -3,10 +3,10 @@ import { page } from './page.mjs';
 async function readJSON(url) {
   const response = await fetch(url, {
     redirect: 'error',
-    signal: AbortSignal.timeout(7500),
+    signal: AbortSignal.timeout(5500),
     headers: { Accept: 'application/json' }
   });
-  if (!response.ok) throw new Error('upstream');
+  if (!response.ok) throw new Error('upstream HTTP ' + response.status);
   return response.json();
 }
 
@@ -46,6 +46,35 @@ async function checkMarket(title, english) {
   }
 }
 
+function structuredProduct(value) {
+  const entries = Array.isArray(value) ? value : [value, ...(value?.['@graph'] || [])];
+  return entries.find(entry => [entry?.['@type']].flat().includes('Product') && typeof entry.name === 'string');
+}
+
+async function readProductPage(url) {
+  const response = await fetch(url, {
+    redirect: 'follow',
+    signal: AbortSignal.timeout(6000),
+    headers: { Accept: 'text/html' }
+  });
+  if (!response.ok || !['www.digikala.com', 'digikala.com'].includes(new URL(response.url || url).hostname)) {
+    throw new Error('product page HTTP ' + response.status);
+  }
+  const html = await response.text();
+  for (const script of html.matchAll(/<script\b[^>]*\btype\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    let product;
+    try { product = structuredProduct(JSON.parse(script[1])); } catch { continue; }
+    if (!product) continue;
+    const offer = Array.isArray(product.offers) ? product.offers[0] : product.offers;
+    const amount = Number(offer?.price);
+    const currency = { IRR: 10, IRT: 1 }[offer?.priceCurrency];
+    const inStock = String(offer?.availability).split('/').pop() === 'InStock';
+    const price = currency && inStock && Number.isFinite(amount) && amount > 0 ? amount / currency : null;
+    return { title: product.name, price };
+  }
+  throw new Error('product schema missing');
+}
+
 async function checkProduct(input) {
   let url;
   try { url = new URL(input); } catch { return { error: 'invalid' }; }
@@ -58,8 +87,22 @@ async function checkProduct(input) {
     const data = await readJSON('https://api.digikala.com/v2/product/' + id + '/');
     product = data.data?.product;
     if (!product?.title_fa) throw new Error('format');
-  } catch {
-    return { error: 'source', id };
+  } catch (error) {
+    const canonical = 'https://www.digikala.com/product/dkp-' + id + '/';
+    const slug = url.pathname.split('/')[3];
+    try {
+      const fallback = await readProductPage(canonical + (slug ? slug + '/' : ''));
+      return {
+        id, ...fallback, url: canonical, priceSource: 'page',
+        market: await checkMarket(fallback.title),
+        checkedAt: new Date().toISOString()
+      };
+    } catch (pageError) {
+      console.warn('Digikala sources unavailable', id, error.message, pageError.message);
+      let searchTitle;
+      try { searchTitle = slug && decodeURIComponent(slug).replace(/-/g, ' ').trim(); } catch {}
+      return { error: 'source', id, searchTitle };
+    }
   }
 
   const variant = product.default_variant;
